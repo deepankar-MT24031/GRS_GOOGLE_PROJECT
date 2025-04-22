@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ddos-protection
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ddos-protection
+  template:
+    metadata:
+      labels:
+        app: ddos-protection
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: nginx-conf
+          mountPath: /etc/nginx/conf.d/default.conf
+          subPath: default.conf
+      volumes:
+      - name: nginx-conf
+        configMap:
+          name: ddos-protection-conf
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ddos-protection-conf
+data:
+  default.conf: |
+    limit_req_zone $binary_remote_addr zone=frontend_limit:10m rate=5r/s;
+    
+    server {
+      listen 80;
+      
+      # Apply rate limiting
+      location / {
+        limit_req zone=frontend_limit burst=10 nodelay;
+        limit_req_status 429;
+        
+        proxy_pass http://frontend.default.svc.cluster.local:80;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        
+        # Add headers to show rate limiting in action
+        add_header X-Rate-Limit-Limit "5r/s";
+        add_header X-Rate-Limit-Remaining $limit_req_status;
+      }
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ddos-protection
+spec:
+  selector:
+    app: ddos-protection
+  ports:
+  - port: 80
+    targetPort: 80
+  type: NodePort

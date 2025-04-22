@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx-exporter
+  template:
+    metadata:
+      labels:
+        app: nginx-exporter
+    spec:
+      containers:
+      - name: nginx-exporter
+        image: nginx/nginx-prometheus-exporter:0.10.0
+        args:
+        - -nginx.scrape-uri=http://cdn-proxy.default.svc.cluster.local/stub_status
+        ports:
+        - containerPort: 9113
+          name: metrics
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-exporter
+  labels:
+    app: nginx-exporter
+spec:
+  ports:
+  - port: 9113
+    name: metrics
+    targetPort: metrics
+  selector:
+    app: nginx-exporter
